@@ -252,19 +252,22 @@ export function run(input) {
     recordRow = header && columns === null ? null : rows.length;
 
     // The record's first line, and whether it holds a quote or a stray CR.
+    // The line is sliced once and both checks run on the slice, so neither
+    // scan can run past the line's end looking for the next quote or CR.
     const nl = text.indexOf('\n', pos);
     const lineEnd = nl === -1 ? len : nl;
-    const qInLine = text.indexOf('"', pos);
-    const hasQuote = qInLine !== -1 && qInLine < lineEnd;
-    const rInLine = text.indexOf('\r', pos);
-    const hasStrayCR = rInLine !== -1 && rInLine < lineEnd && !(nl !== -1 && rInLine === lineEnd - 1);
+    const lineSlice = text.slice(pos, lineEnd);
+    const hasQuote = lineSlice.indexOf('"') !== -1;
+    const hasTrailingCR = nl !== -1 && lineSlice.charCodeAt(lineSlice.length - 1) === 13;
+    const firstCR = lineSlice.indexOf('\r');
+    const hasStrayCR = firstCR !== -1 && !(hasTrailingCR && firstCR === lineSlice.length - 1);
 
     // Fast path: a whole line with no quote in it and no stray CR is plain
     // fields. (A quoted field can span lines, so any quote at all rules the
     // fast path out.)
     if (!hasQuote && !hasStrayCR && lineEnd > pos) {
-      const effEnd = nl !== -1 && rInLine === lineEnd - 1 ? lineEnd - 1 : lineEnd;
-      const fields = effEnd === pos ? [''] : text.slice(pos, effEnd).split(',');
+      const body = hasTrailingCR ? lineSlice.slice(0, -1) : lineSlice;
+      const fields = body === '' ? [''] : body.split(',');
       pos = nl === -1 ? len : nl + 1;
       if (nl !== -1) line += 1;
       // A line left with no characters is no record.
